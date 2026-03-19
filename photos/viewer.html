@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Viewer Pro | Zoom to Mouse</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --accent-color: #007AFF;
+            --bg-gradient: radial-gradient(circle at center, #2c2c2c 0%, #000000 100%);
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --text-main: #e0e0e0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            padding: 20px;
+        }
+
+        /* Controls */
+        .controls {
+            background: var(--card-bg);
+            padding: 10px 25px;
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border: 1px solid rgba(255,255,255,0.1);
+            z-index: 10;
+        }
+
+        input[type="range"] {
+            width: 150px;
+            accent-color: var(--accent-color);
+        }
+
+        input[type="text"] {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            color: white;
+            padding: 5px;
+            border-radius: 6px;
+            width: 60px;
+            text-align: center;
+        }
+
+        /* Layout */
+        .main-workspace {
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+            width: 95%;
+            max-width: 1200px;
+            height: 80vh;
+            margin-top: 20px;
+        }
+
+        /* Sidebar */
+        .gallery {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 15px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            width: 110px;
+            min-width: 110px;
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .gallery::-webkit-scrollbar { width: 5px; }
+        .gallery::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+
+        .icons {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: 0.2s;
+            flex-shrink: 0;
+        }
+
+        .icons.active { border-color: var(--accent-color); transform: scale(1.05); }
+
+        /* Viewer */
+        .viewer-outer {
+            position: relative;
+            flex: 1;
+            height: 100%;
+        }
+
+        .viewer-container {
+            width: 100%;
+            height: 104%;
+            background: rgba(0,0,0,0.5);
+            border-radius: 15px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            position: relative;
+            cursor: grab;
+        }
+
+        .viewer-container:active { cursor: grabbing; }
+
+        #megali {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: block;
+            transition: opacity 0.3s;
+            user-select: none;
+            -webkit-user-drag: none;
+            will-change: transform, width;
+        }
+
+        /* Description */
+        #description-box {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid var(--accent-color);
+            font-size: 0.9rem;
+            pointer-events: none;
+            z-index: 5;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="controls">
+    <label>Zoom</label>
+    <input type="range" min="300" max="2500" value="400" id="slider">
+    <input type="text" id="timi">
+    <span>px</span>
+</div>
+
+<div class="main-workspace">
+    <div class="gallery">
+        <img src="https://raw.githubusercontent.com/panverger/medalert/main/photos/esp32-c6.jpg" class="icons active" data-desc="Arduino ESP32-C6">
+        <img src="https://raw.githubusercontent.com/panverger/medalert/main/photos/encoder.jpg" class="icons active" data-desc="Encoder για καταγραφή στροφών">
+		<img src="https://raw.githubusercontent.com/panverger/medalert/main/photos/gyro.jpg" class="icons active" data-desc="Αισθητήρας γυροσκόπιο και επιτάχυνσης">
+        <img src="https://raw.githubusercontent.com/panverger/medalert/main/photos/oxymeter.jpg" class="icons active" data-desc="Αισθητήρας Ο2 και καρδιακών παλμών">
+        <img src="https://raw.githubusercontent.com/panverger/medalert/main/photos/unipolar-stepper-driver.jpg" class="icons active" data-desc="Οδηγός για βηματικό μοτέρ Unipolar">		
+    </div>
+
+    <div class="viewer-outer">
+        <div class="viewer-container" id="frame">
+            <img src="https://raw.githubusercontent.com/panverger/medalert/main/photos/esp32-c6.jpg" id="megali">
+        </div>
+        <div id="description-box">Arduino ESP32-C6</div>
+    </div>
+</div>
+
+<script>
+    const slider = document.getElementById('slider');
+    const timi = document.getElementById('timi');
+    const icons = document.querySelectorAll('.icons');
+    const megali = document.getElementById('megali');
+    const frame = document.getElementById('frame');
+    const descBox = document.getElementById('description-box');
+
+    let isDragging = false;
+    let startX, startY;
+    let imgX = 0, imgY = 0;
+
+    /**
+     * UPDATE ZOOM
+     * newVal: the target width in pixels
+     * mouseX/mouseY: (Optional) client coordinates to zoom towards
+     */
+    function updateZoom(newVal, mouseX = null, mouseY = null) {
+        const oldWidth = parseFloat(megali.style.width) || 400;
+        const val = Math.max(slider.min, Math.min(slider.max, newVal));
+        
+        if (mouseX !== null && mouseY !== null) {
+            const rect = frame.getBoundingClientRect();
+            
+            // 1. Find mouse position relative to the image's current visual center
+            // (rect.width/2 + imgX) is the current center point of the image inside the frame
+            const relativeMouseX = (mouseX - rect.left) - (rect.width / 2 + imgX);
+            const relativeMouseY = (mouseY - rect.top) - (rect.height / 2 + imgY);
+
+            // 2. Determine how much the image size is changing
+            const ratio = val / oldWidth;
+
+            // 3. Offset the panning to keep the point under the mouse
+            imgX -= relativeMouseX * (ratio - 1);
+            imgY -= relativeMouseY * (ratio - 1);
+        }
+
+        megali.style.width = val + 'px';
+        slider.value = val;
+        timi.value = Math.round(val);
+        
+        applyTransform();
+    }
+
+    function applyTransform() {
+        megali.style.transform = `translate(calc(-50% + ${imgX}px), calc(-50% + ${imgY}px))`;
+    }
+
+    /* PANNING LOGIC */
+    frame.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        frame.style.cursor = 'grabbing';
+        startX = e.clientX - imgX;
+        startY = e.clientY - imgY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        imgX = e.clientX - startX;
+        imgY = e.clientY - startY;
+        applyTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+        isDragging = false;
+        frame.style.cursor = 'grab';
+    });
+
+    /* WHEEL ZOOM LOGIC */
+    frame.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomStep = 120;
+        let currentZoom = parseFloat(slider.value);
+        
+        if (e.deltaY < 0) {
+            updateZoom(currentZoom + zoomStep, e.clientX, e.clientY);
+        } else {
+            updateZoom(currentZoom - zoomStep, e.clientX, e.clientY);
+        }
+    }, { passive: false });
+
+    /* INPUT LISTENERS */
+    slider.addEventListener('input', e => updateZoom(e.target.value));
+    timi.addEventListener('change', e => updateZoom(e.target.value));
+
+    /* IMAGE SELECTION */
+    icons.forEach(icon => {
+        icon.addEventListener('click', function() {
+            icons.forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+            
+            megali.style.opacity = 0;
+            
+            // Reset position on image change
+            imgX = 0; 
+            imgY = 0;
+
+            setTimeout(() => {
+                megali.src = this.src;
+                megali.style.width = "400px"; // Reset to default zoom
+                slider.value = 400;
+                applyTransform();
+                megali.style.opacity = 1;
+            }, 100);
+            
+            descBox.textContent = this.getAttribute('data-desc');
+        });
+    });
+
+    /* INITIALIZE */
+    updateZoom(slider.value);
+</script>
+
+</body>
+</html>
